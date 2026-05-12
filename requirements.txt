@@ -1,0 +1,8 @@
+gradio
+opencv-python
+numpy
+pandas
+scikit-learn
+scikit-image
+matplotlib
+joblib
