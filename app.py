@@ -5,15 +5,57 @@ with OpenCV/skimage, accepts the hardware values manually, and predicts Grade
 A/B/C. STM32 serial input is intentionally left as a future integration point.
 """
 
+
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import matplotlib
+matplotlib.use("Agg")
 import cv2
 import gradio as gr
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import re
+import os
+import threading
+from urllib.error import URLError, HTTPError
+from urllib.request import Request, urlopen
+
+try:
+    import serial
+except ImportError:
+    serial = None
+
+SERIAL_PORT = os.getenv("STM32_SERIAL_PORT", "COM13")
+ser = None
+serial_error = "pyserial is not installed" if serial is None else "not connected"
+serial_lock = threading.Lock()
+serial_line_buffer = ""
+
+
+def connect_stm32():
+    """Open the configured STM32 port if the serial library and port are available."""
+    global ser, serial_error
+    if serial is None:
+        serial_error = "Install dependencies with: pip install -r requirements.txt"
+        return False
+    if ser is not None and ser.is_open:
+        return True
+    try:
+        ser = serial.Serial(SERIAL_PORT, 115200, timeout=0.1)
+        serial_error = ""
+        return True
+    except (OSError, serial.SerialException) as exc:
+        ser = None
+        serial_error = str(exc)
+        return False
+
+
+connect_stm32()
+
+
 
 try:
     from skimage.feature import graycomatrix, graycoprops
@@ -120,7 +162,39 @@ def load_model_package() -> Tuple[object, List[str], str]:
 MODEL, FEATURE_COLS, MODEL_LOAD_ERROR = load_model_package()
 
 
-def read_hardware_values_from_stm32() -> Dict[str, float]:
+def read_hardware_values_from_stm32():
+
+    line = ser.readline().decode().strip()
+
+    print("STM32:", line)
+
+    match = re.search(
+        r'Weight:\s*([\d.]+)\s*g\s*\|\s*Temp:\s*([\d.]+)',
+        line
+    )
+
+    if match:
+
+        weight = float(match.group(1))
+        temp = float(match.group(2))
+
+        return {
+            "weight_g": weight,
+            "surface_temp_C": temp,
+            "ambient_temp_C": 26.0,
+            "relative_humidity_pct": 55.0,
+            "pressure_hPa": 1013.25,
+            "gas_resistance_kohm": 80.0,
+        }
+
+    return {
+        "weight_g": 120.0,
+        "surface_temp_C": 27.0,
+        "ambient_temp_C": 26.0,
+        "relative_humidity_pct": 55.0,
+        "pressure_hPa": 1013.25,
+        "gas_resistance_kohm": 80.0,
+    }
     """Future hook for STM32 serial integration.
 
     For this version, the app uses manual Gradio number inputs. Later, this
@@ -585,6 +659,117 @@ def empty_outputs(message: str):
         make_feature_importance_plot(),
     )
 
+def get_live_sensor_text():
+
+    if ser is None:
+        return "STM32 not connected"
+
+    try:
+        line = ser.readline().decode().strip()
+
+        print(line)
+
+        return line
+
+    except Exception as e:
+        return f"Error: {e}"
+    
+
+
+def update_sensor_values():
+    return read_stm32_measurement()
+
+
+def read_stm32_measurement():
+    """Read buffered STM32 output and extract the final weight and temperature."""
+    global serial_line_buffer
+    if not connect_stm32():
+        return gr.update(), gr.update(), f"STM32 disconnected on {SERIAL_PORT}: {serial_error}"
+
+    latest = None
+    try:
+        with serial_lock:
+            waiting = ser.in_waiting
+            if waiting:
+                serial_line_buffer += ser.read(waiting).decode(errors="ignore")
+            lines = serial_line_buffer.splitlines(keepends=True)
+            serial_line_buffer = ""
+            if lines and not lines[-1].endswith(("\n", "\r")):
+                serial_line_buffer = lines.pop()
+            for raw_line in lines:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                print("STM32:", line)
+                match = re.search(
+                    r"(?:FINAL\s*->\s*)?Weight:\s*(-?[\d.]+)\s*g\s*\|\s*Temp:\s*(-?[\d.]+)",
+                    line,
+                    re.IGNORECASE,
+                )
+                if match:
+                    latest = (float(match.group(1)), float(match.group(2)))
+    except (OSError, serial.SerialException) as exc:
+        return gr.update(), gr.update(), f"STM32 read failed on {SERIAL_PORT}: {exc}"
+
+    if latest is None:
+        return gr.update(), gr.update(), f"Connected to {SERIAL_PORT}. Waiting for `FINAL -> Weight: … g | Temp: … C`."
+    weight, temperature = latest
+    return gr.update(value=weight), gr.update(value=temperature), (
+        f"Read final STM32 measurement: **{weight:.2f} g**, **{temperature:.2f} °C**."
+    )
+
+
+def capture_from_esp32(camera_url):
+    """Request a still image from the ESP32 and return it to the image input."""
+    base_url = (camera_url or "").strip().rstrip("/")
+    if not base_url:
+        return None, "Enter the ESP32 camera address (for example http://192.168.1.50)."
+    if not base_url.startswith(("http://", "https://")):
+        base_url = "http://" + base_url
+
+    flash_enabled = False
+    try:
+        flash_request = Request(
+            f"{base_url}/control?var=led_intensity&val=180",
+            headers={"Cache-Control": "no-cache"},
+        )
+        with urlopen(flash_request, timeout=5) as response:
+            flash_enabled = response.status == 200
+    except (HTTPError, URLError, TimeoutError, OSError):
+        # Older/custom camera servers may not expose the LED intensity control.
+        pass
+
+    capture_url = f"{base_url}/capture?flash=1"
+    try:
+        request = Request(capture_url, headers={"Cache-Control": "no-cache"})
+        with urlopen(request, timeout=20) as response:
+            content_type = response.headers.get_content_type()
+            image_bytes = response.read()
+        if content_type != "image/jpeg" or not image_bytes:
+            return None, "ESP32 did not return a JPEG. Check its firmware capture endpoint."
+        image = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return None, "The ESP32 response could not be decoded as an image."
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        status = (
+            "Photo captured with flash enabled. Review it below, then select Predict Grade."
+            if flash_enabled
+            else "Photo captured, but this camera server did not accept the flash control. Check LED_GPIO_NUM and flash support in its firmware."
+        )
+        return image, status
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        return None, f"Could not reach the ESP32 at {base_url}. Confirm both devices are on the same Wi-Fi and the address is correct. ({exc})"
+    finally:
+        if flash_enabled:
+            try:
+                off_request = Request(
+                    f"{base_url}/control?var=led_intensity&val=0",
+                    headers={"Cache-Control": "no-cache"},
+                )
+                with urlopen(off_request, timeout=5):
+                    pass
+            except (HTTPError, URLError, TimeoutError, OSError):
+                pass
 
 def run_prediction(
     image,
@@ -595,16 +780,18 @@ def run_prediction(
     pressure_hpa,
     gas_resistance_kohm,
 ):
+    
+
     """Main Gradio callback: image features + manual hardware values + model prediction."""
     try:
         hardware_values = {
-            "weight_g": float(weight_g),
-            "surface_temp_C": float(surface_temp_c),
-            "ambient_temp_C": float(ambient_temp_c),
-            "relative_humidity_pct": float(relative_humidity_pct),
-            "pressure_hPa": float(pressure_hpa),
-            "gas_resistance_kohm": float(gas_resistance_kohm),
-        }
+    "weight_g": float(weight_g),
+    "surface_temp_C": float(surface_temp_c),
+    "ambient_temp_C": float(ambient_temp_c),
+    "relative_humidity_pct": float(relative_humidity_pct),
+    "pressure_hPa": float(pressure_hpa),
+    "gas_resistance_kohm": float(gas_resistance_kohm),
+}
     except (TypeError, ValueError):
         return empty_outputs("Please enter valid numeric values for all hardware/sensor inputs.")
 
@@ -665,14 +852,23 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
         gr.Markdown(model_state)
 
     gr.Markdown("## 1. User Inputs")
+    
     with gr.Row():
         with gr.Column(scale=1):
+            camera_url = gr.Textbox(
+                label="ESP32-CAM address",
+                value=os.getenv("ESP32_CAMERA_URL", "http://192.168.1.50"),
+                info="Use the IP printed in the Arduino Serial Monitor.",
+            )
+            capture_status = gr.Markdown("Connect the ESP32-CAM to the same Wi-Fi as this app.")
+            capture_button = gr.Button("Capture photo with flash", variant="secondary")
             image_input = gr.Image(
-                label="Upload one banana image",
+                label="Banana photo (camera capture or upload)",
                 image_mode="RGB",
                 sources=["upload"],
                 type="numpy",
             )
+            
             predict_button = gr.Button("Predict Grade", variant="primary")
         with gr.Column(scale=1):
             weight_g = gr.Number(value=120.0, label="weight_g", precision=2)
@@ -681,6 +877,21 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
             relative_humidity_pct = gr.Number(value=55.0, label="relative_humidity_pct", precision=2)
             pressure_hpa = gr.Number(value=1013.25, label="pressure_hPa", precision=2)
             gas_resistance_kohm = gr.Number(value=80.0, label="gas_resistance_kohm", precision=2)
+            stm32_status = gr.Markdown(
+                f"STM32 status: {'connected on ' + SERIAL_PORT if ser is not None else 'not connected on ' + SERIAL_PORT + ' — ' + serial_error}"
+            )
+            read_stm32_button = gr.Button("Read latest STM32 measurement")
+            timer = gr.Timer(1)
+
+            timer.tick(
+                fn=update_sensor_values,
+                outputs=[weight_g, surface_temp_c, stm32_status]
+            ) 
+
+            read_stm32_button.click(
+                fn=read_stm32_measurement,
+                outputs=[weight_g, surface_temp_c, stm32_status],
+            )
 
     gr.Markdown("## 2. Final Result")
     with gr.Row():
@@ -725,6 +936,8 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
         with gr.Column(scale=1):
             feature_importance_plot = gr.Plot(value=make_feature_importance_plot(), label="Feature importance plot")
 
+    
+
     predict_button.click(
         fn=run_prediction,
         inputs=[
@@ -755,6 +968,21 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
         ],
     )
 
+    capture_button.click(
+        fn=capture_from_esp32,
+        inputs=[camera_url],
+        outputs=[image_input, capture_status],
+    )
+
+    
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7860, share=False)
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,
+        prevent_thread_lock=True,
+        quiet=True,
+    )
+    print("App started. Open http://127.0.0.1:7860 on this computer.", flush=True)
+    demo.block_thread()

@@ -1,6 +1,6 @@
 # Non-Destructive Banana Grade Prediction App
 
-This project is a local Gradio web app for banana quality/ripeness grading. It accepts manual hardware/sensor values and a banana image, extracts image-processing features, combines them with sensor values, and predicts Grade A/B/C using a trained Random Forest model.
+This project is a local Gradio web app for banana quality/ripeness grading. It accepts manual hardware/sensor values and a banana image, extracts image-processing features, combines them with sensor values, and predicts Grade A/B/C using a trained Random Forest model. An ESP32-CAM on the same Wi-Fi can capture a still image into the app.
 
 The current version is local-first: it does not retrain the model, does not require STM32 serial input, and loads the trusted model package from:
 
@@ -78,11 +78,24 @@ Run the app:
 python app.py
 ```
 
-Then open:
+Then open on the computer running the app:
 
 ```text
 http://127.0.0.1:7860
 ```
+
+To open the app from a phone or another computer on the same Wi-Fi, use the host computer's LAN address, for example `http://192.168.1.20:7860`. Allow Python through the host firewall for private networks if prompted.
+
+## ESP32-CAM photo capture
+
+1. In Arduino IDE, upload the CameraWebServer sketch with the correct camera model selected in `board_config.h`. Enter your Wi-Fi credentials in the sketch and keep them private.
+2. Open Serial Monitor at 115200 baud and note the `Camera Ready!` IP address. Open that address in a browser first to confirm the camera server is reachable.
+3. In the app, enter that address in **ESP32-CAM address**, then use **Capture photo with flash**. The returned photo appears in the image box; use **Predict Grade** to analyze it.
+4. The app sets the camera server's LED intensity to 180, requests the JPEG, then sets LED intensity back to zero. This needs CameraWebServer firmware that supports `/control?var=led_intensity&val=...` and has `LED_GPIO_NUM` defined. The flash GPIO depends on the board; AI-Thinker ESP32-CAM commonly uses GPIO 4. If the app reports that flash control was rejected, confirm the selected camera model and `LED_GPIO_NUM` in `board_config.h`, and verify that the firmware supports the LED intensity control.
+
+The app does not need browser CORS settings because the Python server performs the camera request. Both the computer running the app and ESP32-CAM must be able to reach each other on the local network. You can set the default camera address with `ESP32_CAMERA_URL`; the app also remains usable with uploaded images if the camera is offline.
+
+The app reads STM32 data from COM13 at 115200 baud by default. Close Arduino IDE Serial Monitor while the app is running because only one program can use the COM port at a time. It recognizes lines like `FINAL -> Weight: 0.00 g | Temp: 31.72 C` and updates the weight and surface temperature fields. **Read latest STM32 measurement** also reads any buffered result immediately. Set `STM32_SERIAL_PORT` if the STM32 uses another port. Install dependencies with `pip install -r requirements.txt`, then restart the app.
 
 ## Troubleshooting
 
