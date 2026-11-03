@@ -826,6 +826,54 @@ def run_prediction(
         return empty_outputs(f"Prediction failed: {exc}")
 
 
+def unavailable_advanced_outputs(message):
+    """Clear stale research results without changing any original grade output."""
+    return (
+        f"### Extended analysis unavailable\n{message}",
+        "### Experimentally measured reference\nReference analysis is unavailable for this request.",
+        None, None, None, None,
+        "PCA unavailable for this request.",
+        "No sample-specific research interpretation was generated.",
+        pd.DataFrame(), None,
+    )
+
+
+def build_extended_outputs(features=None, grade=None, comparison="Automatic emphasis", specimen="All bananas"):
+    """Lazy imports and an independent error boundary protect the grade pipeline."""
+    try:
+        from advanced_analysis import build_analysis
+        return build_analysis(features, grade, comparison, specimen)
+    except Exception as exc:
+        return unavailable_advanced_outputs(f"Research module error: {exc}. The original grade output is independent.")
+
+
+def run_prediction_with_analysis(image, weight_g, surface_temp_c, ambient_temp_c,
+                                 relative_humidity_pct, pressure_hpa, gas_resistance_kohm,
+                                 comparison="Automatic emphasis", specimen="All bananas"):
+    """Retain the original fifteen outputs and append ten independent research outputs."""
+    original = run_prediction(image, weight_g, surface_temp_c, ambient_temp_c,
+                              relative_humidity_pct, pressure_hpa, gas_resistance_kohm)
+    try:
+        vector = original[10]
+        grade_match = re.search(r"Predicted Grade: ([ABC])", original[0])
+        if vector.empty or grade_match is None:
+            extended = unavailable_advanced_outputs("Run a successful grade prediction to analyse the current input.")
+        else:
+            # This is the exact, unrounded feature dictionary already used by the RF.
+            # No second segmentation, feature extraction, or model prediction occurs.
+            extended = build_extended_outputs(vector.iloc[0].to_dict(), grade_match.group(1), comparison, specimen)
+    except Exception as exc:
+        extended = unavailable_advanced_outputs(f"Extended analysis failed: {exc}")
+    return (*original, *extended)
+
+
+def update_reference_comparison(state, comparison, specimen):
+    """Redraw historical references from the last prediction, without hardware access."""
+    if state is None:
+        return build_extended_outputs(comparison=comparison, specimen=specimen)
+    return build_extended_outputs(state["features"], state["grade"], comparison, specimen)
+
+
 CUSTOM_CSS = """
 .gradio-container {
     max-width: 1320px !important;
@@ -834,8 +882,19 @@ CUSTOM_CSS = """
     border-left: 5px solid #2f9e44;
     padding-left: 12px;
 }
+.analysis-panel {
+    border: 1px solid var(--border-color-primary);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+#observed-panel { border-left: 4px solid #18765a; }
+#reference-panel { border-left: 4px solid #3b718e; }
+#research-panel { border-left: 4px solid #8a6ba8; }
 """
 
+
+initial_advanced = build_extended_outputs()
 
 with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
     gr.Markdown(
@@ -908,6 +967,60 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
             uploaded_image_output = gr.Image(label="Uploaded image", type="numpy")
             probability_plot = gr.Plot(label="Probability bar plot")
 
+    gr.Markdown(
+        "## Advanced Quality Analysis & Experimental Research Insights\n"
+        "Current observations, historical laboratory measurements, and published research are shown separately. "
+        "The uploaded banana has not undergone FTIR."
+    )
+    advanced_state = gr.State(value=None)
+    with gr.Group(elem_classes=["analysis-panel"], elem_id="observed-panel"):
+        advanced_current = gr.Markdown(initial_advanced[0])
+    with gr.Group(elem_classes=["analysis-panel"], elem_id="reference-panel"):
+        advanced_reference = gr.Markdown(initial_advanced[1])
+        with gr.Accordion("Experimental sample mapping and file validation", open=False):
+            advanced_audit = gr.Dataframe(value=initial_advanced[8], interactive=False,
+                                          label="Historical exports — investigator-supplied biological labels", wrap=True)
+            gr.Markdown(
+                "Display rules (not trained thresholds): failed image-quality check → both groups; "
+                "brown/dark ≥25% → ripe context; green and yellow each ≥25% → both; "
+                "green ≥50% → raw; yellow ≥50% → ripe; otherwise both. Rules are evaluated in this order. "
+                "No weight matching, chemical concentration estimate, or treatment classification is performed."
+            )
+    with gr.Group(elem_classes=["analysis-panel"]):
+        gr.Markdown("### Laboratory spectrum comparisons\nEvery curve comes from a validated historical CRF export.")
+        with gr.Row():
+            reference_comparison = gr.Radio(
+                choices=["Automatic emphasis", "Compare all equally"], value="Automatic emphasis",
+                label="Reference display", info="Automatic emphasis follows the last predicted image, independently of its grade.",
+            )
+            reference_specimen = gr.Dropdown(
+                choices=["All bananas", "B1", "B2", "B3", "B4", "B5"], value="All bananas",
+                label="Peel/pulp comparison: historical specimen",
+                info="Filters only the paired-tissue plot; no similarity match to the uploaded banana.",
+            )
+        with gr.Tabs():
+            with gr.Tab("Raw vs ripe · full spectrum"):
+                advanced_overlay = gr.Plot(value=initial_advanced[2], label="Historical raw / ripe absorbance")
+            with gr.Tab("Paired peel and pulp"):
+                advanced_paired = gr.Plot(value=initial_advanced[3], label="Historical peel / pulp absorbance")
+            with gr.Tab("1200–900 cm⁻¹ fingerprint"):
+                advanced_fingerprint = gr.Plot(value=initial_advanced[4], label="Historical carbohydrate-region comparison")
+            with gr.Tab("Exploratory PCA"):
+                advanced_pca = gr.Plot(value=initial_advanced[5], label="PCA of historical spectra only")
+                advanced_pca_notes = gr.Markdown(initial_advanced[6])
+    with gr.Group(elem_classes=["analysis-panel"], elem_id="research-panel"):
+        advanced_research = gr.Markdown(initial_advanced[7])
+        with gr.Accordion("Literature and scope of evidence", open=False):
+            try:
+                from research_insights import literature_markdown
+                gr.Markdown(literature_markdown())
+            except Exception as exc:
+                gr.Markdown(f"Literature context unavailable: {exc}")
+
+    advanced_outputs = [advanced_current, advanced_reference, advanced_overlay, advanced_paired,
+                        advanced_fingerprint, advanced_pca, advanced_pca_notes, advanced_research,
+                        advanced_audit, advanced_state]
+
     gr.Markdown("## 3. Image Processing Backend")
     with gr.Row():
         mask_overlay_output = gr.Image(label="Banana mask overlay", type="numpy")
@@ -929,6 +1042,11 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
     decision_explanation = gr.Markdown("### Decision Explanation\nRun prediction to generate the explanation.")
 
     gr.Markdown("## 7. Training and Evaluation Evidence")
+    gr.Markdown(
+        "Original grade-model evidence: supplied prototype validation summary (mean accuracy 93.44%), "
+        "confusion matrix and fixed feature importances. These figures are preserved from the original "
+        "application, are not recomputed here, and do not evaluate FTIR or chemical-treatment detection."
+    )
     with gr.Row():
         with gr.Column(scale=1):
             validation_summary = gr.Markdown(make_validation_summary_markdown())
@@ -939,7 +1057,7 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
     
 
     predict_button.click(
-        fn=run_prediction,
+        fn=run_prediction_with_analysis,
         inputs=[
             image_input,
             weight_g,
@@ -948,6 +1066,8 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
             relative_humidity_pct,
             pressure_hpa,
             gas_resistance_kohm,
+            reference_comparison,
+            reference_specimen,
         ],
         outputs=[
             predicted_grade,
@@ -965,7 +1085,19 @@ with gr.Blocks(title="Banana Grade Prediction", css=CUSTOM_CSS) as demo:
             validation_summary,
             confusion_matrix_plot,
             feature_importance_plot,
+            *advanced_outputs,
         ],
+    )
+
+    reference_comparison.change(
+        fn=update_reference_comparison,
+        inputs=[advanced_state, reference_comparison, reference_specimen],
+        outputs=advanced_outputs,
+    )
+    reference_specimen.change(
+        fn=update_reference_comparison,
+        inputs=[advanced_state, reference_comparison, reference_specimen],
+        outputs=advanced_outputs,
     )
 
     capture_button.click(

@@ -1,8 +1,8 @@
-gradio
+gradio==5.50.0
 opencv-python
-numpy
+numpy>=2,<3
 pandas
-scikit-learn
+scikit-learn==1.6.1
 scikit-image
 matplotlib
 joblib

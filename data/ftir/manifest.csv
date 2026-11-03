@@ -1,0 +1,11 @@
+crf_id,banana_id,ripeness,tissue,weight_g,filename,wavenumber_unit,source_unit,sha256,mapping_source
+CRF164,B1,Raw,Peel,69,CRF 164.csv,cm-1,%T,a8dfa7c56145b0fb5f15c7d120129fdb6c5a24b2599b73ca37873482bd68628e,investigator_supplied
+CRF165,B1,Raw,Pulp,69,CRF 165.csv,cm-1,%T,9ba7f7893f2359cfaf6eb45a8a1d5036742c147cabcac5b3c152bc6aa1b769a2,investigator_supplied
+CRF166,B3,Ripe,Peel,97,CRF 166.csv,cm-1,%T,3be20f566f9411ffb59c8d6556608c61baedf48885cb6daf5c369cffcbb187d9,investigator_supplied
+CRF167,B3,Ripe,Pulp,97,CRF 167.csv,cm-1,%T,010fe85d5a53b89bb1df2b2b0ce7fca2cab94e33627d23fd48173eb3a4451bf2,investigator_supplied
+CRF168,B2,Raw,Peel,68,CRF 168.csv,cm-1,%T,2248cee34a4bb7a52e61e98caec89d4115e5a07678a15d42c753a9267804f610,investigator_supplied
+CRF169,B2,Raw,Pulp,68,CRF 169.csv,cm-1,%T,22133e0c7c3989dbfa888861afcc59b9f935c6c38970fadda3d9e3cd2fbc6cc0,investigator_supplied
+CRF170,B4,Ripe,Peel,99,CRF 170.csv,cm-1,%T,0d69ef7a85cc15d5cd649fd28b6788d2b5632a65acc7d1ce07d9c8d7b9923ce9,investigator_supplied
+CRF171,B4,Ripe,Pulp,99,CRF 171.csv,cm-1,%T,9eecd0b746b077f937142ff289ad92728161c8babd0c69ec72f531feb2b02fbc,investigator_supplied
+CRF172,B5,Ripe,Peel,119,CRF 172.csv,cm-1,%T,ca65d6edd0c340a7d09dfb08a5220fbb5775f586fb6cf61a0fd6102b53c2de1d,investigator_supplied
+CRF173,B5,Ripe,Pulp,119,CRF 173.csv,cm-1,%T,571f9c162db9a8ed2ce53ea5c7abd77405e516baca2d98920320b3c8011ad21c,investigator_supplied

@@ -1,0 +1,4 @@
+# Preserve original experimental export bytes (including line endings) on every OS.
+data/ftir/*.csv -text
+*.pkl binary
+*.png binary

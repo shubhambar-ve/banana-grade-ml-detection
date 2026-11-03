@@ -1,0 +1,130 @@
+[
+  {
+    "test_fixture": "green",
+    "features": {
+      "weight_g": 120,
+      "surface_temp_C": 27,
+      "ambient_temp_C": 26,
+      "relative_humidity_pct": 55,
+      "pressure_hPa": 1013.25,
+      "gas_resistance_kohm": 80,
+      "peel_green_pct": 80,
+      "peel_yellow_pct": 15,
+      "peel_brown_spot_pct": 2,
+      "peel_other_pct": 3,
+      "peel_hue_mean_deg": 90,
+      "peel_hue_std_deg": 20,
+      "peel_saturation_mean": 140,
+      "peel_brightness_mean": 180,
+      "peel_texture_contrast": 5,
+      "peel_texture_homogeneity": 0.8,
+      "banana_area_fraction": 0.25,
+      "background_uniformity_score": 0.95,
+      "blur_score": 0.8,
+      "exposure_score": 0.8,
+      "image_quality_score": 0.86
+    },
+    "grade": "C",
+    "probabilities": [
+      0.028258116883116885,
+      0.16649774531024533,
+      0.8052441378066375
+    ]
+  },
+  {
+    "test_fixture": "yellow",
+    "features": {
+      "weight_g": 120,
+      "surface_temp_C": 27,
+      "ambient_temp_C": 26,
+      "relative_humidity_pct": 55,
+      "pressure_hPa": 1013.25,
+      "gas_resistance_kohm": 80,
+      "peel_green_pct": 5,
+      "peel_yellow_pct": 88,
+      "peel_brown_spot_pct": 4,
+      "peel_other_pct": 3,
+      "peel_hue_mean_deg": 90,
+      "peel_hue_std_deg": 20,
+      "peel_saturation_mean": 140,
+      "peel_brightness_mean": 180,
+      "peel_texture_contrast": 5,
+      "peel_texture_homogeneity": 0.8,
+      "banana_area_fraction": 0.25,
+      "background_uniformity_score": 0.95,
+      "blur_score": 0.8,
+      "exposure_score": 0.8,
+      "image_quality_score": 0.86
+    },
+    "grade": "A",
+    "probabilities": [
+      0.5558017676767677,
+      0.1921763167388167,
+      0.25202191558441567
+    ]
+  },
+  {
+    "test_fixture": "mixed",
+    "features": {
+      "weight_g": 120,
+      "surface_temp_C": 27,
+      "ambient_temp_C": 26,
+      "relative_humidity_pct": 55,
+      "pressure_hPa": 1013.25,
+      "gas_resistance_kohm": 80,
+      "peel_green_pct": 40,
+      "peel_yellow_pct": 50,
+      "peel_brown_spot_pct": 5,
+      "peel_other_pct": 5,
+      "peel_hue_mean_deg": 90,
+      "peel_hue_std_deg": 20,
+      "peel_saturation_mean": 140,
+      "peel_brightness_mean": 180,
+      "peel_texture_contrast": 5,
+      "peel_texture_homogeneity": 0.8,
+      "banana_area_fraction": 0.25,
+      "background_uniformity_score": 0.95,
+      "blur_score": 0.8,
+      "exposure_score": 0.8,
+      "image_quality_score": 0.86
+    },
+    "grade": "B",
+    "probabilities": [
+      0.07036823593073593,
+      0.4749878246753246,
+      0.4546439393939395
+    ]
+  },
+  {
+    "test_fixture": "dark",
+    "features": {
+      "weight_g": 120,
+      "surface_temp_C": 27,
+      "ambient_temp_C": 26,
+      "relative_humidity_pct": 55,
+      "pressure_hPa": 1013.25,
+      "gas_resistance_kohm": 80,
+      "peel_green_pct": 5,
+      "peel_yellow_pct": 35,
+      "peel_brown_spot_pct": 55,
+      "peel_other_pct": 5,
+      "peel_hue_mean_deg": 90,
+      "peel_hue_std_deg": 20,
+      "peel_saturation_mean": 140,
+      "peel_brightness_mean": 180,
+      "peel_texture_contrast": 5,
+      "peel_texture_homogeneity": 0.8,
+      "banana_area_fraction": 0.25,
+      "background_uniformity_score": 0.95,
+      "blur_score": 0.8,
+      "exposure_score": 0.8,
+      "image_quality_score": 0.86
+    },
+    "grade": "C",
+    "probabilities": [
+      0.05350595238095237,
+      0.142858134920635,
+      0.8036359126984125
+    ]
+  }
+]

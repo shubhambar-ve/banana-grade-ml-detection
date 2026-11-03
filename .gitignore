@@ -11,3 +11,7 @@ desktop.ini
 *.log
 outputs/
 temp/
+.tools/
+.python/
+.test-cache/
+.ruff_cache/
